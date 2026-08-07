@@ -1,0 +1,40 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python build dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Build Windows application
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --name "AutoPomodoro" --icon "assets/AutoPomodoro.ico" --add-data "assets/app-icon.svg:assets" main.py
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "windows-installer.iss"'
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoPomodoro-Official-1.0-Windows-Setup
+          path: dist/AutoPomodoro-Official-1.0-Windows-Setup.exe
+          if-no-files-found: error
