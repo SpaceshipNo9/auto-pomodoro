@@ -1,0 +1,16 @@
+.DS_Store
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.spec
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Local user settings and selected personal assets are not source files.
+settings.json
+*.local.json
+
