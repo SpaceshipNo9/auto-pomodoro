@@ -9,6 +9,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton  # noqa: E402
 
 from pomodoro.settings import AppSettings  # noqa: E402
+from pomodoro.engine import Phase  # noqa: E402
 from pomodoro.ui import AlertDialog, MainWindow, OptionToggle  # noqa: E402
 
 
@@ -39,7 +40,13 @@ class OptionToggleTests(unittest.TestCase):
         self.assertTrue(window.top_checkbox.isChecked())
         self.assertFalse(window.startup_checkbox.isChecked())
         self.assertEqual(window.font_combo.currentData(), "")
+        window.tabs.setCurrentIndex(1)
+        self.app.processEvents()
+        self.assertTrue(window.top_checkbox.isVisible())
         QTest.mouseClick(window.top_checkbox, Qt.MouseButton.LeftButton, pos=window.top_checkbox.rect().center())
+        window.tabs.setCurrentIndex(4)
+        self.app.processEvents()
+        self.assertTrue(window.startup_checkbox.isVisible())
         QTest.mouseClick(window.startup_checkbox, Qt.MouseButton.LeftButton, pos=window.startup_checkbox.rect().center())
         with patch.object(AppSettings, "save"), patch("pomodoro.ui.set_start_on_login") as startup:
             window._save_settings()
@@ -48,6 +55,50 @@ class OptionToggleTests(unittest.TestCase):
         self.assertEqual(window.settings.font_family, "")
         startup.assert_called_once_with(True)
         window.close()
+
+    def test_visual_refresh_preserves_engine_and_settings(self) -> None:
+        with patch("pomodoro.ui.AppSettings.load", return_value=AppSettings()):
+            window = MainWindow()
+        window.poll_timer.stop()
+        window.engine.mouse_moved(0)
+        before = (window.engine.deadline, window.engine.last_mouse_move, vars(window.settings).copy())
+        window._refresh(1470)
+        self.assertEqual(window.clock_label.text(), "00:30")
+        self.assertTrue(window.phase_note.property("imminent"))
+        self.assertEqual(window.engine.phase, Phase.WORKING)
+        self.assertEqual(before, (window.engine.deadline, window.engine.last_mouse_move, vars(window.settings)))
+        window.engine.tick(1500)
+        window.engine.phase = Phase.WORK_ALERT
+        window.engine.confirm_work_alert(1500)
+        window._refresh(1510)
+        self.assertTrue(window.specimen.resting)
+        self.assertFalse(window.phase_note.property("imminent"))
+        window.close()
+
+    def test_small_window_all_settings_remain_accessible(self) -> None:
+        with patch("pomodoro.ui.AppSettings.load", return_value=AppSettings()):
+            window = MainWindow()
+        window.resize(680, 540)
+        window.show()
+        for index in range(window.tabs.count()):
+            window.tabs.setCurrentIndex(index)
+            self.app.processEvents()
+            self.assertEqual(window.scroll.horizontalScrollBar().maximum(), 0)
+            self.assertGreaterEqual(window.tabs.currentWidget().height(), window.tabs.currentWidget().minimumSizeHint().height())
+        window.scroll.ensureWidgetVisible(window.findChild(QLabel, "credit"))
+        self.app.processEvents()
+        credit = window.findChild(QLabel, "credit")
+        position = credit.mapTo(window.scroll.viewport(), credit.rect().center())
+        self.assertTrue(window.scroll.viewport().rect().contains(position))
+        window.close()
+
+    def test_custom_popup_text_is_literal_and_wrapped(self) -> None:
+        title = "<b>休息 & 放松</b> " * 4
+        dialog = AlertDialog(title, "<i>自定义文字</i>", "确认", "", False, "#25302b", "")
+        label = next(label for label in dialog.findChildren(QLabel) if label.text() == title)
+        self.assertEqual(label.textFormat(), Qt.TextFormat.PlainText)
+        self.assertTrue(label.wordWrap())
+        dialog.accept()
 
     def test_alert_cannot_be_rejected_but_confirmation_closes_it(self) -> None:
         dialog = AlertDialog(
