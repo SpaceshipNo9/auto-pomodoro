@@ -9,8 +9,8 @@ __pycache__/
 htmlcov/
 build/
 dist/
+preview/
 
 # Local user settings and selected personal assets are not source files.
 settings.json
 *.local.json
-
